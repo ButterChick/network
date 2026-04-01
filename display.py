@@ -20,9 +20,9 @@ st.caption(f"📂 Using database: `{args.db}`")
 
 #Load Data
 @st.cache_data
-def load_data(db_path, limit = 1000):
+def load_data(db_path):
     conn = sqlite3.connect(db_path)
-    df = pd.read_sql_query("SELECT * FROM packets LIMIT {limit}", conn)
+    df = pd.read_sql_query("SELECT * FROM packets", conn)
     conn.close()
     return df
 

@@ -9,13 +9,14 @@ import argparse
 logging.getLogger("asyncio").setLevel(logging.CRITICAL)
 # --- EXTRACT ---
 def extract_packets_live(interface, target_host=None, batch_size=10):
-    bpf_filter = None
+    bpf_filter = None #Berkeley Packet Filter
     if target_host:
         ip = resolve_host(target_host) if not target_host[0].isdigit() else target_host
         bpf_filter = f"host {ip}"
 
     capture = pyshark.LiveCapture(interface=interface, bpf_filter=bpf_filter)
     batch = []
+
 
     try:
         for pkt in capture.sniff_continuously():
@@ -28,6 +29,7 @@ def extract_packets_live(interface, target_host=None, batch_size=10):
                     "dst_ip":    pkt.ip.dst if hasattr(pkt, "ip") else None,
                 }
                 batch.append(record)
+                print(record)
                 if len(batch) >= batch_size:
                     yield batch
                     batch = []
