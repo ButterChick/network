@@ -68,7 +68,7 @@ def transform(packets):
     return cleaned, flagged
 
 # --- LOAD --- (same logic as original)
-def load(packets, db_name, batch_size=10, is_flagged=False):
+def load(packets, db_name, batch_size=10, is_flagged=False, batch_num = None):
     if not packets:
         return
     with sqlite3.connect(db_name) as conn:
@@ -83,15 +83,14 @@ def load(packets, db_name, batch_size=10, is_flagged=False):
                   flagged INT DEFAULT 0)''')
         now = datetime.now().isoformat()
         flagged_value = 1 if is_flagged else 0
-        for i in range(0, len(packets), batch_size):
-            batch = packets[i : i + batch_size]
-            c.executemany(
-                'INSERT INTO packets VALUES (?,?,?,?,?,?,?)',
-                [(p['timestamp'], p['protocol'], p['length'],
-                  p['src_ip'], p['dst_ip'], now, flagged_value) for p in batch]
-            )
-            conn.commit()
-            print(f"Inserted batch {i // batch_size + 1} - {len(batch)} records")
+        label = f"batch {batch_num}" if batch_num else "batch"        
+        c.executemany(
+            'INSERT INTO packets VALUES (?,?,?,?,?,?,?)',
+            [(p['timestamp'], p['protocol'], p['length'],
+              p['src_ip'], p['dst_ip'], now, flagged_value) for p in packets]
+        )
+        conn.commit()
+        print(f"Inserted {label} - {len(packets)} {'flagged' if is_flagged else 'clean'} records")
 
 '''
 CLI Interface
@@ -105,24 +104,22 @@ def main():
     parser.add_argument('--batch-size', type=int, default=10, help="Batch size", dest="batch_size")
     args = parser.parse_args()
 
-    all_cleaned = []
-    all_flagged = []
+    total_cleaned = 0
+    total_flagged = 0
+    batch_num = 0
 
     print(f"Capturing on {args.interface}" + (f" filtered to {args.host}" if args.host else "") + " — press Ctrl+C to stop\n")
 
     for batch in extract_packets_live(args.interface, target_host=args.host, batch_size=args.batch_size):
         cleaned, flagged = transform(batch)
-        all_cleaned.extend(cleaned)
-        all_flagged.extend(flagged)
+        batch_num +=1
+        load(cleaned, args.db, args.batch_size, is_flagged=False,batch_num=batch_num)
+        load(flagged, args.db, args.batch_size, is_flagged=True,batch_num=batch_num)
+        total_cleaned+= len(cleaned)
+        total_flagged+= len(flagged)
 
-    print(f"\n--- Loading Clean Packets ---")
-    load(all_cleaned, args.db, args.batch_size, is_flagged=False)
-
-    print(f"\n--- Loading Flagged Packets ---")
-    load(all_flagged, args.db, args.batch_size, is_flagged=True)
-
-    print(f"\nDone - {len(all_cleaned)} total packets loaded into {args.db}")
-    print(f"Flagged - {len(all_flagged)} packets exceeded 1000 bytes")
+    print(f"\nDone - {total_cleaned} total packets loaded into {args.db}")
+    print(f"Flagged - {(total_flagged)} packets exceeded 1000 bytes")
 
 if __name__ == '__main__':
     main()
