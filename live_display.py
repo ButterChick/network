@@ -1,125 +1,145 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-import seaborn as sns
+import time
 import argparse
 import sys
-import time
+from datetime import datetime
 
-st.set_page_config(page_title="Network Traffic Dashboard", layout="wide")
-st.title("Network Traffic Analysis Dashboard")
+st.set_page_config(page_title="Real-Time Data Ingestion", layout="wide")
+st.title("Real-Time Data Ingestion")
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Network Traffic Dashboard")
-    parser.add_argument('--db', default= "traffic.db", help="SQL Database Name")
-    return parser.parse_args(sys.argv[1:])  # skip streamlit's own args
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--db", default="traffic.db", help="SQLite database path")
+    return parser.parse_args(sys.argv[1:])
 
 args = get_args()
-st.caption(f"📂 Using database: `{args.db}`")
+st.caption(f"Reading from: `{args.db}`")
 
+def fetch_new(db_path, since_rowid):
+    try:
+        conn = sqlite3.connect(db_path)
+        df = pd.read_sql_query(
+            "SELECT rowid, * FROM packets WHERE rowid > ? ORDER BY rowid ASC",
+            conn, params=(since_rowid,)
+        )
+        conn.close()
+        return df
+    except Exception as e:
+        st.error(f"DB error: {e}")
+        return pd.DataFrame()
 
-def load_data(db_path):
-    conn = sqlite3.connect(db_path)
-    df = pd.read_sql_query("SELECT * FROM packets", conn)
-    conn.close()
-    return df
+for key, default in {
+    "last_rowid":    0,
+    "clean_feed":    [],
+    "flagged_feed":  [],
+    "total_clean":   0,
+    "total_flagged": 0,
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
-refresh_interval = st.sidebar.slider("Refresh Interval (Seconds)", 1, 10, 20)
-auto_refresh = st.sidebar.checkbox("Auto-refresh", value=True)
+st.sidebar.header("Settings")
+threshold    = st.sidebar.slider("Flag threshold (length ≥ X bytes)", 100, 1500, 1000)
+max_rows     = st.sidebar.slider("Max rows shown per feed", 10, 100, 20)
+poll_interval = st.sidebar.slider("Poll interval (seconds)", 1, 10, 3)
+run          = st.sidebar.checkbox("Run stream", value=True)
 
-if auto_refresh:
-    time.sleep(refresh_interval)
+if st.sidebar.button("Reset feeds"):
+    st.session_state.clean_feed    = []
+    st.session_state.flagged_feed  = []
+    st.session_state.total_clean   = 0
+    st.session_state.total_flagged = 0
+    #last_rowid is intentionally NOT reset so we don't re-process old rows
     st.rerun()
 
-if st.sidebar.button("Refresh Now"):
-    st.rerun()
+counter_area = st.empty()
 
-df = load_data(args.db)
+st.markdown("---")
 
-if df.empty:
-    st.warning("No packets captured yet. Make sure live_etl.py is running.")
-    st.stop()
+col_clean, col_flagged = st.columns(2)
 
-st.success(f"✅ Loaded {len(df):,} packets from traffic.db")
-st.dataframe(df.head(10), use_container_width=True)
-st.divider()
+with col_clean:
+    st.subheader("✅ Clean Data")
+    clean_box = st.empty()
 
-col1, col2, col3 = st.columns(3)
-# Protocol Distribution
-with col1:
-    st.subheader("Protocol Distribution")
-    fig, ax = plt.subplots(figsize=(5, 4))
-    df['protocol'].value_counts().plot(kind='bar', ax=ax, color='steelblue', edgecolor='black')
-    ax.set_xlabel("Protocol")
-    ax.set_ylabel("Count")
-    ax.tick_params(axis='x', rotation=45)
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close()
+with col_flagged:
+    st.subheader("🚨 Flagged Data")
+    flagged_box = st.empty()
 
-#Flagged vs Clean Packets
-with col2:
-    st.subheader("Flagged vs Clean Packets")
-    fig, ax = plt.subplots(figsize=(5, 4))
-    df['flagged'].value_counts().rename({0: 'Clean', 1: 'Flagged'}).plot(
-        kind='pie', ax=ax, autopct='%1.1f%%',
-        colors=['steelblue', 'tomato'], startangle=90
+def render_feed(records, kind):
+    if not records:
+        return "*No new records yet.*"
+    header = "| # | Time | Src IP | Dst IP | Proto | Length |\n"
+    header += "|---|------|--------|--------|-------|--------|\n"
+    rows = ""
+    for r in reversed(records[-max_rows:]):
+        length_str = f"**{r['length']}**" if kind == "flagged" else str(r['length'])
+        rows += (
+            f"| {r['rowid']} | {r['ts']} | {r['src_ip']} "
+            f"| {r['dst_ip']} | {r['protocol']} | {length_str} |\n"
+        )
+    return header + rows
+
+def render_counters():
+    total = st.session_state.total_clean + st.session_state.total_flagged
+    pct   = (st.session_state.total_flagged / total * 100) if total else 0
+    counter_area.markdown(
+        f"**New records ingested:** `{total}` &nbsp;|&nbsp; "
+        f"Clean: `{st.session_state.total_clean}` &nbsp;|&nbsp; "
+        f"Flagged: `{st.session_state.total_flagged}` &nbsp;|&nbsp; "
+        f"Flag rate: `{pct:.1f}%` &nbsp;|&nbsp; "
+        f"Last poll: `{datetime.now().strftime('%H:%M:%S')}`"
     )
-    ax.set_ylabel("")
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close()
 
-#Packet Length Distribution
-with col3:
-    st.subheader("Packet Length Distribution")
-    fig, ax = plt.subplots(figsize=(5, 4))
-    sns.histplot(df['length'], bins=30, kde=True, color='steelblue', ax=ax)
-    ax.axvline(x=1000, color='red', linestyle='--', label='Threshold (1000)')
-    ax.set_xlabel("Packet Length (bytes)")
-    ax.set_ylabel("Count")
-    ax.legend()
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close()
+render_counters()
+clean_box.markdown(render_feed(st.session_state.clean_feed, "clean"))
+flagged_box.markdown(render_feed(st.session_state.flagged_feed, "flagged"))
 
-st.divider()
+if run:
+    new_df = fetch_new(args.db, st.session_state.last_rowid)
 
-col4, col5 = st.columns(2)
-#Top 10 Source IPs
-with col4:
-    st.subheader("Top 10 Source IPs (Packet Count)")
-    fig, ax = plt.subplots(figsize=(6, 5))
-    df['src_ip'].value_counts().head(10).plot(kind='barh', ax=ax, color='steelblue', edgecolor='black')
-    ax.set_xlabel("Packet Count")
-    ax.set_ylabel("Source IP")
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close()
+    if not new_df.empty and 'rowid' in new_df.columns:
+        # Advance the cursor — next poll will skip these rows entirely
+        st.session_state.last_rowid = int(new_df['rowid'].max())
 
-#Top 10 Destination IPs
-with col5:
-    st.subheader("Top 10 Destination IPs (Packet Count)")
-    fig, ax = plt.subplots(figsize=(6, 5))
-    df['dst_ip'].value_counts().head(10).plot(kind='barh', ax=ax, color='tomato', edgecolor='black')
-    ax.set_xlabel("Packet Count")
-    ax.set_ylabel("Destination IP")
-    plt.tight_layout()
-    st.pyplot(fig)
-    plt.close()
+        for _, row in new_df.iterrows():
+            record = {
+                "rowid":    int(row.get('rowid', 0)),
+                "ts":       datetime.now().strftime("%H:%M:%S"),
+                "src_ip":   row.get('src_ip',   '?'),
+                "dst_ip":   row.get('dst_ip',   '?'),
+                "protocol": row.get('protocol', '?'),
+                "length":   row.get('length',   0),
+            }
 
-st.divider()
+            # Flag condition: packet length at or above threshold
+            if record["length"] >= threshold:
+                st.session_state.flagged_feed.append(record)
+                st.session_state.total_flagged += 1
+            else:
+                st.session_state.clean_feed.append(record)
+                st.session_state.total_clean += 1
 
-#Top 10 Source IPs by Total Bytes Sent
-st.subheader("Top 10 Source IPs by Total Bytes Sent")
-fig, ax = plt.subplots(figsize=(12, 5))
-df.groupby('src_ip')['length'].sum().sort_values(ascending=False).head(10).plot(
-    kind='barh', ax=ax, color='seagreen', edgecolor='black'
-)
-ax.set_xlabel("Total Bytes")
-ax.set_ylabel("Source IP")
-plt.tight_layout()
-st.pyplot(fig)
-plt.close()
+        # Trim feeds to avoid unbounded memory growth
+        st.session_state.clean_feed   = st.session_state.clean_feed[-200:]
+        st.session_state.flagged_feed = st.session_state.flagged_feed[-200:]
+
+        # Update UI in place
+        render_counters()
+        clean_box.markdown(render_feed(st.session_state.clean_feed, "clean"))
+        flagged_box.markdown(render_feed(st.session_state.flagged_feed, "flagged"))
+
+    else:
+        counter_area.markdown(
+            f"Waiting for new rows… `last_rowid={st.session_state.last_rowid}` "
+            f"Last checked: `{datetime.now().strftime('%H:%M:%S')}`"
+        )
+
+    # Wait then trigger next poll
+    time.sleep(poll_interval)
+    st.rerun()
+
+else:
+    st.info("Stream paused. Check **Run stream** in the sidebar to resume.")
