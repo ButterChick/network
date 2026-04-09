@@ -41,7 +41,6 @@ for key, default in {
         st.session_state[key] = default
 
 st.sidebar.header("Settings")
-threshold    = st.sidebar.slider("Flag threshold (length ≥ X bytes)", 100, 1500, 1000)
 max_rows     = st.sidebar.slider("Max rows shown per feed", 10, 100, 20)
 poll_interval = st.sidebar.slider("Poll interval (seconds)", 1, 10, 3)
 run          = st.sidebar.checkbox("Run stream", value=True)
@@ -61,11 +60,11 @@ st.markdown("---")
 col_clean, col_flagged = st.columns(2)
 
 with col_clean:
-    st.subheader("✅ Clean Data")
+    st.subheader("Clean Data")
     clean_box = st.empty()
 
 with col_flagged:
-    st.subheader("🚨 Flagged Data")
+    st.subheader("Flagged Data")
     flagged_box = st.empty()
 
 def render_feed(records, kind):
@@ -115,7 +114,7 @@ if run:
             }
 
             # Flag condition: packet length at or above threshold
-            if record["length"] >= threshold:
+            if record["length"] >= 1000:
                 st.session_state.flagged_feed.append(record)
                 st.session_state.total_flagged += 1
             else:
