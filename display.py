@@ -3,9 +3,7 @@ import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import subprocess
 import sys
-import time
 
 st.set_page_config(page_title="Network Traffic Dashboard", layout="wide")
 st.title("Network Traffic Analysis Dashboard")
@@ -23,76 +21,6 @@ def get_default_db():
 
 _default_db = get_default_db()
 
-
-# ── Session state init ────────────────────────────────────────────────────────
-if 'capture_process' not in st.session_state:
-    st.session_state.capture_process = None
-
-
-# ── Sidebar: Live Capture Controls ───────────────────────────────────────────
-st.sidebar.header("🎛️ Live Capture Controls")
-
-interface  = st.sidebar.text_input("Network Interface", value="eth0",
-                                    help="e.g. eth0, Wi-Fi, en0")
-target_host = st.sidebar.text_input("Target Host (optional)",
-                                     placeholder="e.g. google.com or 8.8.8.8")
-batch_size  = st.sidebar.number_input("Batch Size", min_value=1,
-                                       max_value=100, value=10)
-db_name     = st.sidebar.text_input("Database Name", value=_default_db)
-
-st.sidebar.divider()
-
-col_start, col_stop = st.sidebar.columns(2)
-
-with col_start:
-    if st.button("▶ Start", use_container_width=True):
-        proc = st.session_state.capture_process
-        if proc is None or proc.poll() is not None:
-            cmd = [
-                sys.executable, "live_capture.py",
-                "--interface", interface,
-                "--db",        db_name,
-                "--batch-size", str(batch_size),
-            ]
-            if target_host.strip():
-                cmd += ["--host", target_host.strip()]
-
-            st.session_state.capture_process = subprocess.Popen(cmd)
-            st.sidebar.success(
-                f"Capturing on **{interface}**"
-                + (f" → `{target_host}`" if target_host.strip() else "")
-            )
-        else:
-            st.sidebar.warning("Capture already running.")
-
-with col_stop:
-    if st.button("⏹ Stop", use_container_width=True):
-        proc = st.session_state.capture_process
-        if proc and proc.poll() is None:
-            proc.terminate()
-            st.session_state.capture_process = None
-            st.cache_data.clear()
-            st.sidebar.info("Capture stopped.")
-        else:
-            st.sidebar.warning("No active capture.")
-
-# Status indicator
-proc = st.session_state.capture_process
-if proc and proc.poll() is None:
-    st.sidebar.success("🟢 Capture running…")
-else:
-    st.sidebar.info("🔴 Capture idle")
-
-st.sidebar.divider()
-st.caption(f"📂 Using database: `{db_name}`")
-
-# Auto-refresh while capturing
-if proc and proc.poll() is None:
-    st.cache_data.clear()
-    time.sleep(2)
-    st.rerun()
-
-
 # ── Data loading ──────────────────────────────────────────────────────────────
 @st.cache_data
 def load_data(db_path):
@@ -105,12 +33,12 @@ def load_data(db_path):
         st.error(f"Could not load database: {e}")
         return pd.DataFrame()
 
-df = load_data(db_name)
+df = load_data(_default_db)
 
 if df.empty:
-    st.info("⏳ No packets yet — use the sidebar to start a capture, then data will appear here automatically.")
+    st.info("No packets yet — use the sidebar to start a capture, then data will appear here automatically.")
 else:
-    st.success(f"✅ Loaded {len(df):,} packets from `{db_name}`")
+    st.success(f"Loaded {len(df):,} packets from `{_default_db}`")
     st.dataframe(df.head(10), use_container_width=True)
     st.divider()
 
