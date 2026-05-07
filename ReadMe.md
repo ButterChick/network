@@ -1,9 +1,9 @@
-Network Traffic ETL Pipeline
+# Network Traffic ETL Pipeline
 A Python-based ETL pipeline that extracts network packet data from PCAP files, processes it, and stores structured insights in a SQLite database.
 
 How to Get Started
 1. Install Dependencies
-bashpip install pyshark
+` pip install pyshark `
 
 Requires Wireshark/tshark installed on your system.
 
@@ -13,7 +13,7 @@ Repository: https://github.com/ButterChick/network
 Make a pull request for this repository.
 
 3. Run the Pipeline
-bashpython etl.py --pcap http.cap --db traffic.db
+`python etl.py --pcap http.cap --db traffic.db`
 4. Expected Output
 --- Loading Clean Packets ---
 Inserted batch 1 - 10 records
@@ -64,9 +64,9 @@ sqlpackets (
 
 For Displaying the Data
 1. Install Dependencies
-bashpip install streamlit pandas matplotlib seaborn
+`pip install streamlit pandas matplotlib seaborn`
 2. Run the Code
-bashstreamlit run display.py -- --db traffic.db
+`streamlit run display.py -- --db traffic.db`
 3. Expected Output
 The Streamlit dashboard renders a Network Traffic Analysis Dashboard with:
 
@@ -78,12 +78,12 @@ Top 10 Source IPs (Packet Count) — horizontal bar chart
 Top 10 Destination IPs (Packet Count) — horizontal bar chart
 
 
-Live Network Traffic ETL Pipeline
+# Live Network Traffic ETL Pipeline
 A real-time ETL pipeline that captures live network traffic, processes packets, and stores structured data in a SQLite database.
 
 How to Get Started
 1. Install Dependencies
-bashpip install pyshark
+`pip install pyshark`
 
 Requires Wireshark/tshark installed on your system.
 
