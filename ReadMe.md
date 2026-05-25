@@ -159,10 +159,7 @@ Requires Wireshark/tshark installed on your system.
 
 ## Pull Request Using GitHub
 
-Repository:  
-:contentReference[oaicite:1]{index=1}
-
-Make a pull request for this repository.```bash 
+```bash 
 git clone https://github.com/ButterChick/network.git
 cd network
 ```
@@ -329,7 +326,6 @@ Last checked: 13:31:33
 
 Columns:
 
-- #
 - Time
 - Src IP
 - Dst IP
