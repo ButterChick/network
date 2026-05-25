@@ -162,8 +162,10 @@ Requires Wireshark/tshark installed on your system.
 Repository:  
 :contentReference[oaicite:1]{index=1}
 
-Make a pull request for this repository.
-
+Make a pull request for this repository.```bash 
+git clone https://github.com/ButterChick/network.git
+cd network
+```
 ---
 
 ## Run the Pipeline
