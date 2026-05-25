@@ -18,10 +18,10 @@ Requires Wireshark/tshark installed on your system.
 
 ## Pull Request Using GitHub
 
-Repository:  
-:contentReference[oaicite:0]{index=0}
-
-Make a pull request for this repository.
+```bash 
+git clone https://github.com/ButterChick/network.git
+cd network
+```
 
 ---
 
